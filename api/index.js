@@ -7,6 +7,7 @@ app.get('/', (req, res) => {
     res.json({ 
         status: true,
         message: "YouTube Downloader API is Active", 
+        owner: "NN TECH",
         endpoints: ["/api/download/mp3?url=...", "/api/download/mp4?url=..."] 
     });
 });
