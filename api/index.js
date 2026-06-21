@@ -17,15 +17,21 @@ app.get('/api/download/mp3', async (req, res) => {
     const url = req.query.url;
     if (!url) return res.status(400).json({ status: false, error: "URL missing" });
     
-    // Cache එකතු කිරීම - මෙය API එකේ වේගය බෙහෙවින් වැඩි කරනු ඇත
     res.setHeader('Cache-Control', 'public, max-age=86400');
     
     try {
         const result = await ytmp3(url);
         if (!result) return res.status(500).json({ status: false, error: "Failed to fetch MP3" });
         
-        // Metadata සහ Download URL සහිත සම්පූර්ණ ප්‍රතිචාරය
-        res.json({ status: true, data: result });
+        // අවශ්‍ය Format එකට දත්ත සකස් කිරීම
+        res.json({ 
+            status: true, 
+            data: {
+                title: result.title,
+                duration: result.dur || 0,
+                download: result.url
+            }
+        });
     } catch (e) {
         res.status(500).json({ status: false, error: e.message });
     }
@@ -36,15 +42,21 @@ app.get('/api/download/mp4', async (req, res) => {
     const url = req.query.url;
     if (!url) return res.status(400).json({ status: false, error: "URL missing" });
     
-    // Cache එකතු කිරීම - මෙය API එකේ වේගය බෙහෙවින් වැඩි කරනු ඇත
     res.setHeader('Cache-Control', 'public, max-age=86400');
     
     try {
         const result = await ytmp4(url);
         if (!result) return res.status(500).json({ status: false, error: "Failed to fetch MP4" });
         
-        // Metadata සහ Download URL සහිත සම්පූර්ණ ප්‍රතිචාරය
-        res.json({ status: true, data: result });
+        // අවශ්‍ය Format එකට දත්ත සකස් කිරීම
+        res.json({ 
+            status: true, 
+            data: {
+                title: result.title,
+                duration: result.dur || 0,
+                download: result.url
+            }
+        });
     } catch (e) {
         res.status(500).json({ status: false, error: e.message });
     }
