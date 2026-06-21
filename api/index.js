@@ -2,6 +2,21 @@ const express = require('express');
 const { ytmp3, ytmp4 } = require('yt-downld');
 const app = express();
 
+// ✅ CORS middleware — hemma request ekatama apply wenawa
+// (mehema express ekema dapoth, vercel.json headers config eka
+//  apply wuna na unath, browser eke CORS error eka enne na)
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
+    res.header('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Accept');
+
+    // browser eken preflight (OPTIONS) request ekak awoth methenma reply karanna
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    next();
+});
+
 // මුල් පිටුව
 app.get('/', (req, res) => {
     res.json({ 
