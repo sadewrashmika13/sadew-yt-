@@ -23,13 +23,15 @@ app.get('/api/download/mp3', async (req, res) => {
         const result = await ytmp3(url);
         if (!result) return res.status(500).json({ status: false, error: "Failed to fetch MP3" });
         
-        // අවශ්‍ය Format එකට දත්ත සකස් කිරීම
+        // මෙහිදී අපි result එකේ URL එක සොයා ගැනීමට විවිධ keys උත්සාහ කරමු
+        const downloadUrl = result.url || result.download || (result.data ? result.data.url : null) || "";
+        
         res.json({ 
             status: true, 
             data: {
-                title: result.title,
-                duration: result.dur || 0,
-                download: result.url
+                title: result.title || "Unknown Title",
+                duration: result.dur || result.duration || 0,
+                download: downloadUrl
             }
         });
     } catch (e) {
@@ -48,13 +50,15 @@ app.get('/api/download/mp4', async (req, res) => {
         const result = await ytmp4(url);
         if (!result) return res.status(500).json({ status: false, error: "Failed to fetch MP4" });
         
-        // අවශ්‍ය Format එකට දත්ත සකස් කිරීම
+        // මෙහිදී අපි result එකේ URL එක සොයා ගැනීමට විවිධ keys උත්සාහ කරමු
+        const downloadUrl = result.url || result.download || (result.data ? result.data.url : null) || "";
+        
         res.json({ 
             status: true, 
             data: {
-                title: result.title,
-                duration: result.dur || 0,
-                download: result.url
+                title: result.title || "Unknown Title",
+                duration: result.dur || result.duration || 0,
+                download: downloadUrl
             }
         });
     } catch (e) {
