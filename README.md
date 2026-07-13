@@ -1,15 +1,15 @@
-# 🚀 YouTube Downloader API
+# 🚀 YouTube Downloader API (NN TECH)
 
 A fast, lightweight, and reliable YouTube video/audio downloader API built with Node.js and deployed on Vercel.
 
-[![Stars](https://img.shields.io/github/stars/NethminaNawanjana/yt-downld-api?style=social)](https://github.com/NethminaNawanjana/yt-downld-api)
-[![Forks](https://img.shields.io/github/forks/NethminaNawanjana/yt-downld-api?style=social)](https://github.com/NethminaNawanjana/yt-downld-api/fork)
+[![Stars](https://img.shields.io/github/stars/NETHMINA-NAWANJANA/nntech-free-yt-api?style=social)](https://github.com/NETHMINA-NAWANJANA/nntech-free-yt-api)
+[![Forks](https://img.shields.io/github/forks/NETHMINA-NAWANJANA/nntech-free-yt-api?style=social)](https://github.com/NETHMINA-NAWANJANA/nntech-free-yt-api/fork)
 
 ---
 
 ## 📺 About
 Hi! I am **R.A Nethmina Nawanjana**. This API was developed to simplify downloading YouTube content efficiently. 
-Check out my YouTube channel for more tech tutorials and updates: 
+Check out my YouTube channel (**NN TECH**) for more tech tutorials and updates: 
 [**Subscribe to NN TECH**](https://youtube.com/@NNTECH)
 
 ---
