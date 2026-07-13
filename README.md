@@ -10,7 +10,7 @@ A fast, lightweight, and reliable YouTube video/audio downloader API built with 
 ## 📺 About
 Hi! I am **R.A Nethmina Nawanjana**. This API was developed to simplify downloading YouTube content efficiently. 
 Check out my YouTube channel (**NN TECH**) for more tech tutorials and updates: 
-[**Subscribe to NN TECH**](https://youtube.com/@NNTECH)
+[**Subscribe to NN TECH**](https://youtube.com/@N.N_TECH)
 
 ---
 
