@@ -39,8 +39,10 @@ GET /api/download/mp4?url=[https://youtu.be/EXAMPLE_ID](https://youtu.be/EXAMPLE
 1. Fork this repository to your GitHub account.
 2. Log in to Vercel.
 3. Click "Add New" -> "Project" and import this repository.
-4. Vercel will automatically detect the settings from vercel.json.
-5. Click "Deploy".
+4. When asked for "Framework Preset", select "Other".
+5. Vercel will automatically detect the settings from vercel.json.
+6. Click "Deploy".
+
 ```
 
 If you find this project useful, please Star ⭐ this repository 
