@@ -1,4 +1,4 @@
-# 🚀 YouTube Downloader API (NN TECH)
+# 🚀 YouTube Downloader API
 
 A fast, lightweight, and reliable YouTube video/audio downloader API built with Node.js and deployed on Vercel.
 
