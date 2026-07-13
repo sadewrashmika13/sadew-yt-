@@ -2,7 +2,6 @@ const express = require('express');
 const { ytmp3, ytmp4 } = require('yt-downld');
 const app = express();
 
-// මුල් පිටුව
 app.get('/', (req, res) => {
     res.json({ 
         status: true,
