@@ -28,3 +28,6 @@ Check out my YouTube channel (**NN TECH**) for more tech tutorials and updates:
 **Request:**
 ```text
 GET /api/download/mp3?url=[https://youtu.be/EXAMPLE_ID](https://youtu.be/EXAMPLE_ID)
+
+```text
+GET /api/download/mp4?url=[https://youtu.be/EXAMPLE_ID](https://youtu.be/EXAMPLE_ID)
