@@ -32,3 +32,19 @@ GET /api/download/mp3?url=[https://youtu.be/EXAMPLE_ID](https://youtu.be/EXAMPLE
 ```text
 GET /api/download/mp4?url=[https://youtu.be/EXAMPLE_ID](https://youtu.be/EXAMPLE_ID)
 ```
+
+## 🚀 How to Deploy on Vercel
+
+```text
+1. Fork this repository to your GitHub account.
+2. Log in to Vercel.
+3. Click "Add New" -> "Project" and import this repository.
+4. Vercel will automatically detect the settings from vercel.json.
+5. Click "Deploy".
+```
+
+If you find this project useful, please Star ⭐ this repository 
+and Fork it to your own profile to help others find it!
+
+
+Built with ❤️ by NN TECH
