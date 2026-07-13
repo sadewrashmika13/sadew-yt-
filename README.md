@@ -22,12 +22,13 @@ Check out my YouTube channel (**NN TECH**) for more tech tutorials and updates:
 | `GET` | `/api/download/mp4?url=` | Download YouTube video as MP4 |
 
 ---
+## ⚡Request (MP3):
 
-## ⚡ Usage Example
-
-**Request:**
 ```text
 GET /api/download/mp3?url=[https://youtu.be/EXAMPLE_ID](https://youtu.be/EXAMPLE_ID)
+```
+## ⚡Request (MP4):
 
 ```text
 GET /api/download/mp4?url=[https://youtu.be/EXAMPLE_ID](https://youtu.be/EXAMPLE_ID)
+```
