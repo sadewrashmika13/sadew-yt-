@@ -1,20 +1,20 @@
 const express = require('express');
 const serverless = require('serverless-http');
 const axios = require('axios');
+
 const app = express();
+const router = express.Router();
 
 app.use(express.json());
 
-// YouTube URL එක clean කර standard format එකට හැරවීම
+// YouTube URL එක clean කිරීම
 function cleanYoutubeUrl(url) {
     try {
         const parsed = new URL(url);
-        // youtu.be/ID format
         if (parsed.hostname.includes('youtu.be')) {
             const videoId = parsed.pathname.replace('/', '');
             return `https://www.youtube.com/watch?v=${videoId}`;
         }
-        // youtube.com/watch?v=ID format
         if (parsed.searchParams.has('v')) {
             const videoId = parsed.searchParams.get('v');
             return `https://www.youtube.com/watch?v=${videoId}`;
@@ -25,71 +25,69 @@ function cleanYoutubeUrl(url) {
     }
 }
 
-app.get('/', (req, res) => {
-    res.json({ 
-        status: true, 
-        message: "YouTube Downloader API is Active (Fixed Version)", 
+// Base Route
+router.get('/', (req, res) => {
+    res.json({
+        status: true,
+        message: "YouTube Downloader API is Active",
         owner: "NN TECH",
-        endpoints: ["/api/download/mp3?url=...", "/api/download/mp4?url=..."] 
+        endpoints: ["/api/download/mp3?url=...", "/api/download/mp4?url=..."]
     });
 });
 
-// MP3 Download Endpoint
-app.get('/api/download/mp3', async (req, res) => {
+// MP3 Route
+router.get('/api/download/mp3', async (req, res) => {
     const rawUrl = req.query.url;
-    if (!rawUrl) return res.status(400).json({ status: false, error: "URL missing" });
+    if (!rawUrl) return res.status(400).json({ status: false, error: "URL query parameter missing" });
 
     const cleanUrl = cleanYoutubeUrl(rawUrl);
 
     try {
+        // Netlify timeout එක 10s බැවින් axios timeout එක 8s ලෙස සකසා ඇත
         const response = await axios.get(`https://api.siputzx.my.id/api/d/ytmp3?url=${encodeURIComponent(cleanUrl)}`, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             },
-            timeout: 9000 // Netlify timeout එකට පෙර handle කරගැනීමට
+            timeout: 8000
         });
 
-        console.log("MP3 API Upstream Response:", JSON.stringify(response.data));
+        const resData = response.data?.data || response.data?.result;
+        const downloadUrl = resData?.dl || resData?.url || resData?.download || resData?.link;
 
-        if (response.data && response.data.status) {
-            const resData = response.data.data || response.data.result || {};
-            const downloadUrl = resData.dl || resData.url || resData.download || resData.link;
-
-            if (!downloadUrl) {
-                return res.status(500).json({
-                    status: false,
-                    error: "Download link property not found in API response",
-                    raw: response.data
-                });
-            }
-
-            res.json({ 
-                status: true, 
+        if (downloadUrl) {
+            return res.json({
+                status: true,
                 data: {
                     title: resData.title || "YouTube Audio",
                     download: downloadUrl
                 }
             });
-        } else {
-            res.status(500).json({ 
-                status: false, 
-                error: response.data?.message || "Failed to scrape MP3 link. External API error.",
-                details: response.data 
+        }
+
+        return res.status(502).json({
+            status: false,
+            error: "Audio stream link not found in upstream response.",
+            upstream_response: response.data
+        });
+
+    } catch (err) {
+        if (err.code === 'ECONNABORTED') {
+            return res.status(504).json({
+                status: false,
+                error: "Upstream server took too long to process audio (Timeout)."
             });
         }
-    } catch (e) {
-        console.error("MP3 Fetch Error:", e.response?.data || e.message);
-        res.status(500).json({ 
-            status: false, 
-            error: "API Error: " + (e.response?.data?.message || e.message) 
+        return res.status(500).json({
+            status: false,
+            error: "Request failed: " + (err.response?.data?.message || err.message)
         });
     }
 });
 
-// MP4 Download Endpoint
-app.get('/api/download/mp4', async (req, res) => {
+// MP4 Route
+router.get('/api/download/mp4', async (req, res) => {
     const rawUrl = req.query.url;
-    if (!rawUrl) return res.status(400).json({ status: false, error: "URL missing" });
+    if (!rawUrl) return res.status(400).json({ status: false, error: "URL query parameter missing" });
 
     const cleanUrl = cleanYoutubeUrl(rawUrl);
 
@@ -98,24 +96,38 @@ app.get('/api/download/mp4', async (req, res) => {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             },
-            timeout: 9000
+            timeout: 8000
         });
 
-        if (response.data && response.data.status) {
-            const resData = response.data.data || response.data.result || {};
-            res.json({ 
-                status: true, 
+        const resData = response.data?.data || response.data?.result;
+        const downloadUrl = resData?.dl || resData?.url || resData?.download;
+
+        if (downloadUrl) {
+            return res.json({
+                status: true,
                 data: {
                     title: resData.title || "YouTube Video",
-                    download: resData.dl || resData.url || resData.download
+                    download: downloadUrl
                 }
             });
-        } else {
-            res.status(500).json({ status: false, error: "Failed to scrape MP4 link." });
         }
-    } catch (e) {
-        res.status(500).json({ status: false, error: "API Error: " + e.message });
+
+        return res.status(502).json({
+            status: false,
+            error: "Video link not found in upstream response.",
+            upstream_response: response.data
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            status: false,
+            error: "Request failed: " + (err.response?.data?.message || err.message)
+        });
     }
 });
+
+// Routes Handle කිරීම (Local සහ Netlify routes දෙකටම සහය දැක්වීමට)
+app.use('/.netlify/functions/index', router);
+app.use('/', router);
 
 module.exports.handler = serverless(app);
