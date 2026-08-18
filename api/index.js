@@ -3,15 +3,14 @@ const serverless = require('serverless-http');
 const app = express();
 
 // ════════════════════════════════════════════════════
-// 🎵 NN TECH YouTube Downloader API v3.0
+// 🎵 NN TECH YouTube Downloader API v3.1
 // ✅ Uses youtubei.js (YouTube InnerTube) - No external APIs!
 // ✅ Direct YouTube scraping - never goes down
-// Hosted on Netlify Serverless Functions
+// 🔧 FIX: getInfo() + multi-client fallback
 // ════════════════════════════════════════════════════
 
 let innertubeInstance = null;
 
-// Innertube singleton (reuse across requests for speed)
 async function getInnertube() {
     if (!innertubeInstance) {
         const { Innertube } = await import('youtubei.js');
@@ -23,31 +22,85 @@ async function getInnertube() {
     return innertubeInstance;
 }
 
-// Extract video ID from various YouTube URL formats
 function extractVideoId(url) {
     if (!url) return null;
+    // URL එකේ query params (si=...) strip කරනවා
+    const cleanUrl = url.split('?si=')[0].split('&si=')[0];
     const patterns = [
-        /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
-        /^([a-zA-Z0-9_-]{11})$/  // direct ID
+        /(?:youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/,
+        /(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+        /(?:youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
+        /(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+        /^([a-zA-Z0-9_-]{11})$/
     ];
     for (const p of patterns) {
-        const m = url.match(p);
+        const m = cleanUrl.match(p);
         if (m) return m[1];
     }
+    // Last resort: URL එකේ v= parameter ගන්නවා
+    try {
+        const u = new URL(url);
+        const v = u.searchParams.get('v');
+        if (v && v.length === 11) return v;
+    } catch (_) {}
     return null;
 }
 
-// ── Root Endpoint ──
+// 🔥 Multi-client fallback: ANDROID eke නැත්නම් IOS, ඊට පස්සේ TV
+const CLIENT_TYPES = ['ANDROID', 'IOS', 'TV_EMBEDDED', 'WEB'];
+
+async function getVideoInfo(yt, videoId) {
+    let lastError = null;
+    
+    for (const client of CLIENT_TYPES) {
+        try {
+            // 🔥 getInfo() use karanava (getBasicInfo() nemei!)
+            // getInfo() eka streams signature decrypt karanava automatically
+            const info = await yt.getInfo(videoId, client);
+            
+            // Streaming data check
+            const sd = info.streaming_data;
+            if (!sd) continue;
+            
+            const allFormats = [
+                ...(sd.formats || []),
+                ...(sd.adaptive_formats || [])
+            ];
+            
+            // URL thiyena format ekak hoyaganna
+            const hasUrls = allFormats.some(f => f.url || f.decipher_url);
+            if (hasUrls) {
+                console.log(`✅ Got streams from client: ${client} (${allFormats.length} formats)`);
+                return { info, client };
+            }
+            
+            console.log(`⚠️ Client ${client}: ${allFormats.length} formats but no URLs`);
+        } catch (e) {
+            lastError = e;
+            console.log(`❌ Client ${client} failed:`, e.message);
+        }
+    }
+    
+    throw lastError || new Error("All clients failed to get stream URLs");
+}
+
+// Format එකෙන් URL ගන්න helper
+function getFormatUrl(format) {
+    return format.url || format.decipher_url || format.uri || null;
+}
+
+// ── Root ──
 app.get('/', (req, res) => {
     res.json({ 
         status: true,
-        message: "YouTube Downloader API is Active (InnerTube Engine)", 
+        message: "YouTube Downloader API is Active (InnerTube v3.1)", 
         owner: "NN TECH",
-        version: "3.0.0",
-        engine: "youtubei.js (InnerTube)",
+        version: "3.1.0",
+        engine: "youtubei.js (InnerTube - Signature Decryption)",
         endpoints: [
             "/api/download/mp3?url=<youtube_url>",
-            "/api/download/mp4?url=<youtube_url>&quality=<360|480|720|1080>"
+            "/api/download/mp4?url=<youtube_url>&quality=<360|480|720|1080>",
+            "/api/info?url=<youtube_url>"
         ] 
     });
 });
@@ -58,62 +111,72 @@ app.get('/api/download/mp3', async (req, res) => {
     if (!url) return res.status(400).json({ status: false, error: "URL parameter missing" });
 
     const videoId = extractVideoId(url);
-    if (!videoId) return res.status(400).json({ status: false, error: "Invalid YouTube URL" });
+    if (!videoId) return res.status(400).json({ status: false, error: "Invalid YouTube URL. Video ID: null" });
 
     try {
         const yt = await getInnertube();
-        const info = await yt.getBasicInfo(videoId, 'ANDROID');
+        const { info, client } = await getVideoInfo(yt, videoId);
+        const sd = info.streaming_data;
 
         const title = info.basic_info?.title || "YouTube Audio";
         const duration = info.basic_info?.duration || 0;
-        const thumbnail = info.basic_info?.thumbnail?.[0]?.url || "";
+        const thumb = info.basic_info?.thumbnail?.[0]?.url || "";
 
-        // Audio-only formats ටික ගන්නවා
-        const formats = info.streaming_data?.adaptive_formats || [];
-        
-        // Best audio format eka හොයනවා (highest bitrate)
-        const audioFormats = formats.filter(f => 
-            f.mime_type?.includes('audio') && f.url
-        ).sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+        // 1️⃣ Audio-only adaptive formats
+        const audioFormats = (sd.adaptive_formats || [])
+            .filter(f => {
+                const mime = f.mime_type?.toString() || "";
+                return mime.includes('audio') && getFormatUrl(f);
+            })
+            .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
 
-        if (audioFormats.length === 0) {
-            // Fallback: progressive format eka ගන්නවා (audio + video mixed)
-            const progressive = info.streaming_data?.formats || [];
-            const withAudio = progressive.filter(f => f.url).sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-            
-            if (withAudio.length > 0) {
-                return res.json({
-                    status: true,
-                    data: {
-                        title: title,
-                        duration: duration,
-                        thumbnail: thumbnail,
-                        download: withAudio[0].url,
-                        quality: "mixed (audio+video)",
-                        note: "Pure audio not available, sending mixed stream"
-                    }
-                });
-            }
-            return res.status(500).json({ status: false, error: "No audio streams found for this video" });
+        if (audioFormats.length > 0) {
+            const best = audioFormats[0];
+            return res.json({
+                status: true,
+                data: {
+                    title, duration, thumbnail: thumb,
+                    download: getFormatUrl(best),
+                    quality: `${Math.round((best.bitrate || 128000) / 1000)}kbps`,
+                    mime: best.mime_type?.toString() || "audio/mp4",
+                    client_used: client
+                }
+            });
         }
 
-        const bestAudio = audioFormats[0];
+        // 2️⃣ Fallback: Progressive (audio+video combined)
+        const progressive = (sd.formats || [])
+            .filter(f => getFormatUrl(f))
+            .sort((a, b) => (a.bitrate || 0) - (b.bitrate || 0)); // lowest bitrate = smallest file
 
-        res.json({
-            status: true,
-            data: {
-                title: title,
-                duration: duration,
-                thumbnail: thumbnail,
-                download: bestAudio.url,
-                quality: `${Math.round((bestAudio.bitrate || 0) / 1000)}kbps`,
-                mime: bestAudio.mime_type || "audio/mp4"
+        if (progressive.length > 0) {
+            const fallback = progressive[0];
+            return res.json({
+                status: true,
+                data: {
+                    title, duration, thumbnail: thumb,
+                    download: getFormatUrl(fallback),
+                    quality: `${fallback.height || '?'}p (mixed stream)`,
+                    mime: fallback.mime_type?.toString() || "video/mp4",
+                    note: "Pure audio unavailable, sending lowest quality video+audio",
+                    client_used: client
+                }
+            });
+        }
+
+        res.status(500).json({ 
+            status: false, 
+            error: "No audio streams found",
+            debug: {
+                video_id: videoId,
+                adaptive_count: (sd.adaptive_formats || []).length,
+                progressive_count: (sd.formats || []).length,
+                client_used: client
             }
         });
 
     } catch (e) {
         console.error("MP3 Error:", e.message);
-        // Instance cache clear karala retry
         innertubeInstance = null;
         res.status(500).json({ status: false, error: "Download failed: " + e.message });
     }
@@ -130,55 +193,70 @@ app.get('/api/download/mp4', async (req, res) => {
 
     try {
         const yt = await getInnertube();
-        const info = await yt.getBasicInfo(videoId, 'ANDROID');
+        const { info, client } = await getVideoInfo(yt, videoId);
+        const sd = info.streaming_data;
 
         const title = info.basic_info?.title || "YouTube Video";
         const duration = info.basic_info?.duration || 0;
-        const thumbnail = info.basic_info?.thumbnail?.[0]?.url || "";
+        const thumb = info.basic_info?.thumbnail?.[0]?.url || "";
 
-        // 1. Progressive formats (video + audio combined) - best for direct play
-        const progressive = (info.streaming_data?.formats || [])
-            .filter(f => f.url && f.mime_type?.includes('video'))
+        // 1️⃣ Progressive (video+audio) — Direct play venava
+        const progressive = (sd.formats || [])
+            .filter(f => {
+                const mime = f.mime_type?.toString() || "";
+                return mime.includes('video') && getFormatUrl(f);
+            })
             .sort((a, b) => (b.height || 0) - (a.height || 0));
 
-        // 2. Adaptive formats (video only - higher quality but no audio)
-        const adaptive = (info.streaming_data?.adaptive_formats || [])
-            .filter(f => f.url && f.mime_type?.includes('video'))
+        // 2️⃣ Adaptive (video only — higher quality)
+        const adaptive = (sd.adaptive_formats || [])
+            .filter(f => {
+                const mime = f.mime_type?.toString() || "";
+                return mime.includes('video') && getFormatUrl(f);
+            })
             .sort((a, b) => (b.height || 0) - (a.height || 0));
 
-        // Progressive eke requested quality ekata ළඟම එක හොයනවා
+        // Progressive eke quality match karanna try karanava
         let bestMatch = null;
-        
-        // First try progressive (has audio built in - plays directly)
+        let matchSource = "";
+
         if (progressive.length > 0) {
             bestMatch = progressive.find(f => (f.height || 0) <= quality) || progressive[progressive.length - 1];
+            matchSource = "progressive (audio+video)";
         }
 
-        // Progressive eke නැත්නම් adaptive try
-        if (!bestMatch && adaptive.length > 0) {
-            bestMatch = adaptive.find(f => (f.height || 0) <= quality) || adaptive[adaptive.length - 1];
+        // Progressive eke quality adu nam adaptive eken try
+        if ((!bestMatch || (bestMatch.height || 0) < quality) && adaptive.length > 0) {
+            const adaptiveMatch = adaptive.find(f => (f.height || 0) <= quality) || adaptive[adaptive.length - 1];
+            if (!bestMatch || (adaptiveMatch.height || 0) > (bestMatch.height || 0)) {
+                bestMatch = adaptiveMatch;
+                matchSource = "adaptive (video only)";
+            }
         }
 
         if (!bestMatch) {
-            return res.status(500).json({ status: false, error: "No video streams found for this video" });
+            return res.status(500).json({ 
+                status: false, 
+                error: "No video streams found",
+                debug: { videoId, progressive: progressive.length, adaptive: adaptive.length }
+            });
         }
 
-        // Available qualities list eka ගන්නවා
         const availableQualities = [
-            ...progressive.map(f => `${f.height}p (progressive)`),
-            ...adaptive.map(f => `${f.height}p (adaptive)`)
+            ...progressive.map(f => `${f.height}p`),
+            ...adaptive.map(f => `${f.height}p (video-only)`)
         ];
 
         res.json({
             status: true,
             data: {
-                title: title,
-                duration: duration,
-                thumbnail: thumbnail,
-                download: bestMatch.url,
+                title, duration, thumbnail: thumb,
+                download: getFormatUrl(bestMatch),
                 quality: `${bestMatch.height || '?'}p`,
-                mime: bestMatch.mime_type || "video/mp4",
-                available_qualities: [...new Set(availableQualities)]
+                source: matchSource,
+                mime: bestMatch.mime_type?.toString() || "video/mp4",
+                available_qualities: [...new Set(availableQualities)],
+                client_used: client
             }
         });
 
@@ -189,7 +267,7 @@ app.get('/api/download/mp4', async (req, res) => {
     }
 });
 
-// ── Video Info (Bonus Endpoint) ──
+// ── Video Info ──
 app.get('/api/info', async (req, res) => {
     const url = req.query.url;
     if (!url) return res.status(400).json({ status: false, error: "URL parameter missing" });
@@ -200,23 +278,22 @@ app.get('/api/info', async (req, res) => {
     try {
         const yt = await getInnertube();
         const info = await yt.getBasicInfo(videoId, 'ANDROID');
-        const basic = info.basic_info || {};
+        const b = info.basic_info || {};
 
         res.json({
             status: true,
             data: {
-                title: basic.title || "Unknown",
-                duration: basic.duration || 0,
-                channel: basic.channel?.name || basic.author || "Unknown",
-                views: basic.view_count || 0,
-                thumbnail: basic.thumbnail?.[0]?.url || "",
+                title: b.title || "Unknown",
+                duration: b.duration || 0,
+                channel: b.channel?.name || b.author || "Unknown",
+                views: b.view_count || 0,
+                thumbnail: b.thumbnail?.[0]?.url || "",
                 video_id: videoId
             }
         });
     } catch (e) {
-        console.error("Info Error:", e.message);
         innertubeInstance = null;
-        res.status(500).json({ status: false, error: "Failed to get video info: " + e.message });
+        res.status(500).json({ status: false, error: "Info failed: " + e.message });
     }
 });
 
