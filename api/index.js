@@ -1,12 +1,12 @@
 const express = require('express');
-const serverless = require('serverless-http'); // අලුතින් ඇඩ් කරපු එක
-const { ytmp3, ytmp4 } = require('yt-downld');
+const serverless = require('serverless-http');
+const axios = require('axios'); // yt-downld වෙනුවට අපි axios පාවිච්චි කරනවා
 const app = express();
 
 app.get('/', (req, res) => {
     res.json({ 
         status: true,
-        message: "YouTube Downloader API is Active", 
+        message: "YouTube Downloader API is Active (Fixed Version)", 
         owner: "NN TECH",
         endpoints: ["/api/download/mp3?url=...", "/api/download/mp4?url=..."] 
     });
@@ -18,21 +18,22 @@ app.get('/api/download/mp3', async (req, res) => {
     if (!url) return res.status(400).json({ status: false, error: "URL missing" });
     
     try {
-        const result = await ytmp3(url);
-        if (!result) return res.status(500).json({ status: false, error: "Failed to fetch MP3" });
+        // වෙනත් වැඩ කරන සර්වර් එකකින් ඩේටා එක අරගන්නවා
+        const response = await axios.get(`https://api.siputzx.my.id/api/d/ytmp3?url=${encodeURIComponent(url)}`);
         
-        const downloadUrl = result.url || result.download || (result.data ? result.data.url : null) || "";
-        
-        res.json({ 
-            status: true, 
-            data: {
-                title: result.title || "Unknown Title",
-                duration: result.dur || result.duration || 0,
-                download: downloadUrl
-            }
-        });
+        if (response.data && response.data.status) {
+            res.json({ 
+                status: true, 
+                data: {
+                    title: response.data.data.title || "YouTube Audio",
+                    download: response.data.data.dl
+                }
+            });
+        } else {
+            res.status(500).json({ status: false, error: "Failed to scrape MP3 link. Try another video." });
+        }
     } catch (e) {
-        res.status(500).json({ status: false, error: e.message });
+        res.status(500).json({ status: false, error: "API Error: " + e.message });
     }
 });
 
@@ -42,23 +43,22 @@ app.get('/api/download/mp4', async (req, res) => {
     if (!url) return res.status(400).json({ status: false, error: "URL missing" });
     
     try {
-        const result = await ytmp4(url);
-        if (!result) return res.status(500).json({ status: false, error: "Failed to fetch MP4" });
+        const response = await axios.get(`https://api.siputzx.my.id/api/d/ytmp4?url=${encodeURIComponent(url)}`);
         
-        const downloadUrl = result.url || result.download || (result.data ? result.data.url : null) || "";
-        
-        res.json({ 
-            status: true, 
-            data: {
-                title: result.title || "Unknown Title",
-                duration: result.dur || result.duration || 0,
-                download: downloadUrl
-            }
-        });
+        if (response.data && response.data.status) {
+            res.json({ 
+                status: true, 
+                data: {
+                    title: response.data.data.title || "YouTube Video",
+                    download: response.data.data.dl
+                }
+            });
+        } else {
+            res.status(500).json({ status: false, error: "Failed to scrape MP4 link. Try another video." });
+        }
     } catch (e) {
-        res.status(500).json({ status: false, error: e.message });
+        res.status(500).json({ status: false, error: "API Error: " + e.message });
     }
 });
 
-// Netlify වලට තේරෙන්න Serverless විදිහට Export කිරීම
 module.exports.handler = serverless(app);
