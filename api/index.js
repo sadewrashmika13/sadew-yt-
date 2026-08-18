@@ -1,4 +1,5 @@
 const express = require('express');
+const serverless = require('serverless-http'); // අලුතින් ඇඩ් කරපු එක
 const { ytmp3, ytmp4 } = require('yt-downld');
 const app = express();
 
@@ -59,4 +60,5 @@ app.get('/api/download/mp4', async (req, res) => {
     }
 });
 
-module.exports = app;
+// Netlify වලට තේරෙන්න Serverless විදිහට Export කිරීම
+module.exports.handler = serverless(app);
