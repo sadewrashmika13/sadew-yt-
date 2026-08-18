@@ -1,133 +1,168 @@
 const express = require('express');
 const serverless = require('serverless-http');
 const axios = require('axios');
-
 const app = express();
-const router = express.Router();
 
-app.use(express.json());
+// ════════════════════════════════════════════════════
+// 🎵 NN TECH YouTube Downloader API v4.0 (Anti-Bot Bypass)
+// Hosted on Netlify Serverless Functions
+// ════════════════════════════════════════════════════
 
-// YouTube URL එක clean කිරීම
-function cleanYoutubeUrl(url) {
+const TIMEOUT = 15000;
+
+// Helper: Bypass Cloudflare/Anti-Bot redirect pages (e.g. ryzendesu, agatz)
+async function fetchWithBypass(apiUrl) {
     try {
-        const parsed = new URL(url);
-        if (parsed.hostname.includes('youtu.be')) {
-            const videoId = parsed.pathname.replace('/', '');
-            return `https://www.youtube.com/watch?v=${videoId}`;
+        const res = await axios.get(apiUrl, { timeout: TIMEOUT });
+        let data = res.data;
+        
+        // Anti-bot page ekak awoth (redirect_link = ...) bypass karanava
+        if (typeof data === 'string' && data.includes('redirect_link')) {
+            const match = data.match(/redirect_link\s*=\s*'(.*?)'/);
+            if (match && match[1]) {
+                const bypassUrl = match[1] + "fp=-5"; // bypass token
+                const bypassRes = await axios.get(bypassUrl, { timeout: TIMEOUT });
+                data = bypassRes.data;
+            }
         }
-        if (parsed.searchParams.has('v')) {
-            const videoId = parsed.searchParams.get('v');
-            return `https://www.youtube.com/watch?v=${videoId}`;
-        }
-        return url;
-    } catch {
-        return url;
+        return typeof data === 'string' ? JSON.parse(data) : data;
+    } catch (e) {
+        return null;
     }
 }
 
-// Base Route
-router.get('/', (req, res) => {
-    res.json({
+// ── MP3 Download Endpoint ──
+app.get('/api/download/mp3', async (req, res) => {
+    const url = req.query.url;
+    if (!url) return res.status(400).json({ status: false, error: "URL missing" });
+
+    // APIs to try in order
+    const apis = [
+        {
+            name: "Agatz API",
+            url: `https://api.agatz.xyz/api/ytmp3?url=${encodeURIComponent(url)}`,
+            extract: (d) => {
+                if (d?.status === 200 && d?.data?.downloadUrl) {
+                    return { title: d.data.title || "YouTube Audio", download: d.data.downloadUrl };
+                }
+                return null;
+            }
+        },
+        {
+            name: "Ryzendesu API",
+            url: `https://api.ryzendesu.vip/api/downloader/ytmp3?url=${encodeURIComponent(url)}`,
+            extract: (d) => {
+                if (d?.url) { // Ryzendesu returns direct json sometimes after bypass
+                    return { title: "YouTube Audio", download: d.url };
+                }
+                return null;
+            }
+        },
+        {
+            name: "Siputzx API",
+            url: `https://api.siputzx.my.id/api/d/ytmp3?url=${encodeURIComponent(url)}`,
+            extract: (d) => {
+                if (d?.status && d?.data?.dl) {
+                    return { title: d.data.title || "YouTube Audio", download: d.data.dl };
+                }
+                return null;
+            }
+        }
+    ];
+
+    for (const api of apis) {
+        try {
+            const data = await fetchWithBypass(api.url);
+            if (data) {
+                const result = api.extract(data);
+                if (result && result.download) {
+                    return res.json({
+                        status: true,
+                        data: {
+                            title: result.title,
+                            download: result.download,
+                            source: api.name
+                        }
+                    });
+                }
+            }
+        } catch (e) {
+            console.log(`[${api.name}] Failed`);
+        }
+    }
+
+    res.status(500).json({ status: false, error: "All download servers are down or blocked." });
+});
+
+// ── MP4 Download Endpoint ──
+app.get('/api/download/mp4', async (req, res) => {
+    const url = req.query.url;
+    if (!url) return res.status(400).json({ status: false, error: "URL missing" });
+
+    const apis = [
+        {
+            name: "Agatz API",
+            url: `https://api.agatz.xyz/api/ytmp4?url=${encodeURIComponent(url)}`,
+            extract: (d) => {
+                if (d?.status === 200 && d?.data?.downloadUrl) {
+                    return { title: d.data.title || "YouTube Video", download: d.data.downloadUrl };
+                }
+                return null;
+            }
+        },
+        {
+            name: "Ryzendesu API",
+            url: `https://api.ryzendesu.vip/api/downloader/ytmp4?url=${encodeURIComponent(url)}`,
+            extract: (d) => {
+                if (d?.url) {
+                    return { title: "YouTube Video", download: d.url };
+                }
+                return null;
+            }
+        },
+        {
+            name: "Siputzx API",
+            url: `https://api.siputzx.my.id/api/d/ytmp4?url=${encodeURIComponent(url)}`,
+            extract: (d) => {
+                if (d?.status && d?.data?.dl) {
+                    return { title: d.data.title || "YouTube Video", download: d.data.dl };
+                }
+                return null;
+            }
+        }
+    ];
+
+    for (const api of apis) {
+        try {
+            const data = await fetchWithBypass(api.url);
+            if (data) {
+                const result = api.extract(data);
+                if (result && result.download) {
+                    return res.json({
+                        status: true,
+                        data: {
+                            title: result.title,
+                            download: result.download,
+                            source: api.name
+                        }
+                    });
+                }
+            }
+        } catch (e) {
+            console.log(`[${api.name}] Failed`);
+        }
+    }
+
+    res.status(500).json({ status: false, error: "All download servers are down or blocked." });
+});
+
+app.get('/', (req, res) => {
+    res.json({ 
         status: true,
-        message: "YouTube Downloader API is Active",
+        message: "YouTube Downloader API Active (Anti-Bot Bypass)", 
         owner: "NN TECH",
-        endpoints: ["/api/download/mp3?url=...", "/api/download/mp4?url=..."]
+        endpoints: ["/api/download/mp3?url=...", "/api/download/mp4?url=..."] 
     });
 });
-
-// MP3 Route
-router.get('/api/download/mp3', async (req, res) => {
-    const rawUrl = req.query.url;
-    if (!rawUrl) return res.status(400).json({ status: false, error: "URL query parameter missing" });
-
-    const cleanUrl = cleanYoutubeUrl(rawUrl);
-
-    try {
-        // Netlify timeout එක 10s බැවින් axios timeout එක 8s ලෙස සකසා ඇත
-        const response = await axios.get(`https://api.siputzx.my.id/api/d/ytmp3?url=${encodeURIComponent(cleanUrl)}`, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            },
-            timeout: 8000
-        });
-
-        const resData = response.data?.data || response.data?.result;
-        const downloadUrl = resData?.dl || resData?.url || resData?.download || resData?.link;
-
-        if (downloadUrl) {
-            return res.json({
-                status: true,
-                data: {
-                    title: resData.title || "YouTube Audio",
-                    download: downloadUrl
-                }
-            });
-        }
-
-        return res.status(502).json({
-            status: false,
-            error: "Audio stream link not found in upstream response.",
-            upstream_response: response.data
-        });
-
-    } catch (err) {
-        if (err.code === 'ECONNABORTED') {
-            return res.status(504).json({
-                status: false,
-                error: "Upstream server took too long to process audio (Timeout)."
-            });
-        }
-        return res.status(500).json({
-            status: false,
-            error: "Request failed: " + (err.response?.data?.message || err.message)
-        });
-    }
-});
-
-// MP4 Route
-router.get('/api/download/mp4', async (req, res) => {
-    const rawUrl = req.query.url;
-    if (!rawUrl) return res.status(400).json({ status: false, error: "URL query parameter missing" });
-
-    const cleanUrl = cleanYoutubeUrl(rawUrl);
-
-    try {
-        const response = await axios.get(`https://api.siputzx.my.id/api/d/ytmp4?url=${encodeURIComponent(cleanUrl)}`, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            },
-            timeout: 8000
-        });
-
-        const resData = response.data?.data || response.data?.result;
-        const downloadUrl = resData?.dl || resData?.url || resData?.download;
-
-        if (downloadUrl) {
-            return res.json({
-                status: true,
-                data: {
-                    title: resData.title || "YouTube Video",
-                    download: downloadUrl
-                }
-            });
-        }
-
-        return res.status(502).json({
-            status: false,
-            error: "Video link not found in upstream response.",
-            upstream_response: response.data
-        });
-
-    } catch (err) {
-        return res.status(500).json({
-            status: false,
-            error: "Request failed: " + (err.response?.data?.message || err.message)
-        });
-    }
-});
-
-// Routes Handle කිරීම (Local සහ Netlify routes දෙකටම සහය දැක්වීමට)
-app.use('/.netlify/functions/index', router);
-app.use('/', router);
 
 module.exports.handler = serverless(app);
